@@ -1,0 +1,47 @@
+groups:
+  - name: go-service-slos
+    rules:
+      - alert: HTTPP95LatencyHigh
+        expr: histogram_quantile(0.95, sum by (le, job, route) (rate(http_request_duration_seconds_bucket{route!~"/healthz|/readyz"}[5m]))) > 0.25
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.job }} p95 latency is high"
+          description: "Route {{ $labels.route }} p95 has exceeded 250ms for two minutes."
+
+      - alert: HTTPP99LatencyCritical
+        expr: histogram_quantile(0.99, sum by (le, job, route) (rate(http_request_duration_seconds_bucket{route!~"/healthz|/readyz"}[5m]))) > 0.75
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} p99 latency is critical"
+          description: "Route {{ $labels.route }} p99 has exceeded 750ms for two minutes."
+
+      - alert: HTTPErrorBudgetBurn
+        expr: sum by (job) (rate(http_requests_total{status=~"5.."}[5m])) / clamp_min(sum by (job) (rate(http_requests_total[5m])), 0.001) > 0.01
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} is burning its error budget"
+          description: "More than 1% of requests have returned 5xx for two minutes."
+
+      - alert: GoroutineGrowth
+        expr: go_goroutines > 500
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.job }} has excessive goroutines"
+          description: "Goroutine count is above 500; inspect the incident snapshot."
+
+      - alert: HeapPressure
+        expr: go_memstats_heap_alloc_bytes > 200 * 1024 * 1024
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.job }} heap is under pressure"
+          description: "Allocated heap is above 200 MiB."

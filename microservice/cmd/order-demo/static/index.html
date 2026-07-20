@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Idempotency proof — one tap, one order</title>
+  <style>
+    :root { --ink:#16243a; --muted:#62728b; --canvas:#f5f8fc; --card:#fff; --line:#d7e1ee; --blue:#165de7; --blue-soft:#eaf1ff; --green:#087747; --green-soft:#e8f7ef; --red:#af3046; --red-soft:#fff0f3; --amber:#965800; --amber-soft:#fff2dc; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:var(--canvas); font:16px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; }
+    main { width:min(900px, calc(100% - 28px)); margin:32px auto 56px; }
+    header { max-width:760px; margin-bottom:25px; }
+    .eyebrow { color:var(--blue); font-size:.78rem; font-weight:750; text-transform:uppercase; letter-spacing:.1em; }
+    h1 { font-size:clamp(2rem, 6vw, 3.15rem); letter-spacing:-.05em; line-height:1.08; margin:7px 0 12px; }
+    h2 { font-size:1.12rem; margin:0 0 7px; }
+    h3 { font-size:.96rem; margin:0 0 5px; }
+    p { margin:0; }
+    .lead { color:var(--muted); font-size:1.08rem; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:20px; }
+    .contract { border-left:4px solid var(--blue); margin-bottom:18px; }
+    .contract strong { display:block; margin-bottom:4px; }
+    .contract p { color:var(--muted); }
+    .request-strip { display:grid; grid-template-columns:1fr auto 1fr; gap:10px; align-items:center; margin-bottom:18px; }
+    .request { border:1px solid var(--line); border-radius:12px; padding:13px; background:var(--card); }
+    .request small { display:block; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.07em; font-size:.68rem; }
+    .request strong { display:block; margin-top:4px; }
+    .request code { color:#315581; display:block; margin-top:5px; font-size:.79rem; }
+    .equals { color:var(--blue); font-size:1.5rem; font-weight:750; text-align:center; }
+    .proof { margin-bottom:18px; }
+    .proof-header { display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-bottom:14px; }
+    .proof-header p { color:var(--muted); font-size:.88rem; }
+    .checks { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; }
+    .check { position:relative; min-height:148px; padding:14px 13px 13px 47px; border:1px solid var(--line); border-radius:13px; background:#fff; color:var(--muted); }
+    .check::before { content:attr(data-number); position:absolute; left:13px; top:14px; display:grid; place-items:center; width:24px; height:24px; border-radius:50%; background:var(--canvas); font-size:.74rem; font-weight:750; }
+    .check strong { display:block; color:var(--ink); font-size:.94rem; line-height:1.25; }
+    .check span { display:block; margin-top:6px; font-size:.8rem; line-height:1.35; }
+    .check.active { border:2px solid var(--blue); background:var(--blue-soft); }
+    .check.active::before { background:var(--blue); color:#fff; }
+    .check.good { border-color:#a7d9bf; background:var(--green-soft); }
+    .check.good::before { content:'✓'; background:var(--green); color:#fff; }
+    .check.bad { border-color:#edb5c0; background:var(--red-soft); }
+    .check.bad::before { content:'!'; background:var(--red); color:#fff; }
+    .outcome { display:grid; grid-template-columns:1fr auto; align-items:center; gap:18px; background:var(--blue-soft); border-color:#bdd2fb; margin-bottom:14px; }
+    .outcome strong { display:block; font-size:1.06rem; margin-bottom:4px; }
+    .outcome p { color:#315681; }
+    .symbol { display:grid; place-items:center; width:42px; height:42px; border-radius:50%; background:var(--blue); color:#fff; font-size:1.25rem; font-weight:750; }
+    .controls { display:flex; flex-wrap:wrap; gap:9px; align-items:center; }
+    button { appearance:none; border:0; border-radius:9px; padding:11px 14px; font:inherit; font-weight:750; cursor:pointer; }
+    button.primary { color:#fff; background:var(--blue); }
+    button.secondary { color:var(--ink); background:#e8eef8; }
+    button.danger { color:#fff; background:var(--red); }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    .status { min-height:24px; margin:15px 0 18px; color:var(--muted); }
+    .status.error { color:var(--red); }
+    .metrics { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin-bottom:18px; }
+    .metric { padding:14px; background:var(--card); border:1px solid var(--line); border-radius:12px; }
+    .metric small { display:block; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:.06em; font-size:.67rem; }
+    .metric strong { display:block; margin-top:5px; font-size:1.6rem; line-height:1; }
+    .metric span { display:block; color:var(--muted); margin-top:5px; font-size:.79rem; }
+    details { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:0 18px; }
+    summary { cursor:pointer; font-weight:750; padding:14px 0; }
+    .rules { padding:0 0 15px; color:var(--muted); }
+    .rules ol { margin:8px 0 0; padding-left:20px; }
+    .rules li { margin:6px 0; }
+    code { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+    @media (max-width:650px) { main { width:min(100% - 24px, 520px); margin-top:22px; } .request-strip { grid-template-columns:1fr; } .equals { transform:rotate(90deg); margin:-8px 0; } .checks, .metrics { grid-template-columns:1fr; } .check { min-height:102px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="eyebrow">Idempotency proof</div>
+      <h1>Why the second BUY click does not create a second order.</h1>
+      <p class="lead">Idempotency is a promise: repeat the same order request and receive the same order back—not a duplicate trade.</p>
+    </header>
+
+    <section class="card contract" aria-labelledby="contract-title">
+      <h2 id="contract-title">The contract</h2>
+      <strong>Same customer key + same order details → same order ID.</strong>
+      <p>Same customer key + different order details → reject the request. This prevents accidental double trading.</p>
+    </section>
+
+    <section class="request-strip" aria-label="Two equivalent order requests">
+      <div class="request"><small>First request</small><strong>BUY 2 INFY</strong><code>Idempotency-Key: BUY-42</code></div>
+      <div class="equals" aria-hidden="true">=</div>
+      <div class="request"><small>Retry after timeout</small><strong>BUY 2 INFY</strong><code>Idempotency-Key: BUY-42</code></div>
+    </section>
+
+    <section class="card proof" aria-labelledby="proof-title">
+      <div class="proof-header"><h2 id="proof-title">Run the proof</h2><p>Click the requests in this order.</p></div>
+      <div class="checks" id="checks" aria-live="polite"></div>
+    </section>
+
+    <section class="card outcome" aria-live="polite">
+      <div id="outcome"></div><div class="symbol" id="symbol">1</div>
+    </section>
+
+    <div class="controls">
+      <button class="primary" id="original" type="button">1. Send original BUY</button>
+      <button class="secondary" id="retry" type="button" disabled>2. Retry same BUY</button>
+      <button class="danger" id="changed" type="button" disabled>3. Reuse key with BUY 3</button>
+    </div>
+    <p class="status" id="status" role="status">Start by sending the original BUY request.</p>
+
+    <section class="metrics" aria-label="Idempotency evidence">
+      <div class="metric"><small>Orders created</small><strong id="orderCount">0</strong><span>Must stay at one after a retry.</span></div>
+      <div class="metric"><small>Margin commands</small><strong id="eventCount">0</strong><span>Only the first request creates work.</span></div>
+      <div class="metric"><small>Duplicate orders</small><strong id="duplicateCount">0</strong><span>Always zero is the goal.</span></div>
+    </section>
+
+    <details>
+      <summary>What makes this production-shaped code?</summary>
+      <div class="rules">
+        <ol>
+          <li>A database uniqueness rule protects <code>(account_id, idempotency_key)</code>, even when requests arrive together.</li>
+          <li>The first request stores an order fingerprint. An identical retry returns that order; changed details return a conflict.</li>
+          <li>The first order and its <code>margin.reserve</code> outbox command are written in one transaction, so work is never lost between services.</li>
+          <li>Production still requires PostgreSQL, observability, authentication, load testing, and incident handling—this UI demonstrates the idempotency contract, not “perfect” code.</li>
+        </ol>
+      </div>
+    </details>
+  </main>
+  <script>
+    const $ = selector => document.querySelector(selector);
+    const standalone = location.protocol === 'file:';
+    const demo = { phase:0, orderID:'', marginEvents:0, duplicateOrders:0, key:`buy-${Date.now()}` };
+    const steps = [
+      ['Original request', 'Customer sends BUY 2 INFY with key BUY-42.'],
+      ['Same request retries', 'The network reply was lost, so the customer sends the exact request again.'],
+      ['Changed request is blocked', 'The same key is reused but quantity changes from 2 to 3.']
+    ];
+    function checkClass(index) { if (demo.phase > index + 1) return index === 2 ? 'bad' : 'good'; if (demo.phase === index + 1) return index === 2 ? 'bad' : 'active'; return ''; }
+    function render() {
+      $('#checks').innerHTML = steps.map((step, index) => `<article class="check ${checkClass(index)}" data-number="${index + 1}"><strong>${step[0]}</strong><span>${step[1]}</span></article>`).join('');
+      $('#original').disabled = demo.phase !== 0;
+      $('#retry').disabled = demo.phase !== 1;
+      $('#changed').disabled = demo.phase !== 2;
+      $('#orderCount').textContent = demo.phase ? '1' : '0';
+      $('#eventCount').textContent = demo.marginEvents;
+      $('#duplicateCount').textContent = demo.duplicateOrders;
+      const copy = [
+        ['Ready for the original request', 'No order exists yet. The first request will create exactly one order and one durable margin command.', '1'],
+        ['Original request accepted', `Created order ${demo.orderID || 'ORD-001'}. The request is now safely remembered by its customer key.`, '1'],
+        ['Retry returned the same order', `The retry received ${demo.orderID || 'ORD-001'} again. It created no new order and no new margin command.`, '✓'],
+        ['Changed request rejected', 'BUY 3 INFY cannot reuse the BUY 2 INFY key. The platform returns a conflict instead of guessing.', '✓']
+      ][demo.phase];
+      $('#outcome').innerHTML = `<strong>${copy[0]}</strong><p>${copy[1]}</p>`;
+      $('#symbol').textContent = copy[2];
+    }
+    function status(text, error = false) { const element = $('#status'); element.textContent = text; element.classList.toggle('error', error); }
+    async function call(path, body) {
+      const response = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+      const data = await response.json();
+      return {response, data};
+    }
+    function payload(quantity) { return {accountId:'IDEMPOTENCY-DEMO', idempotencyKey:demo.key, instrument:'NSE:INFY', side:'BUY', quantity, limitPrice:150012}; }
+    async function original() {
+      try {
+        if (!standalone) { const result = await call('/api/orders', payload(2)); if (!result.response.ok) throw new Error(result.data.error); demo.orderID = result.data.order.ID.slice(0, 10); }
+        else demo.orderID = 'ORD-8472';
+        demo.marginEvents = 1; demo.phase = 1; render(); status(standalone ? 'Original request accepted in the local proof.' : `202 Created · order ${demo.orderID}`);
+      } catch (error) { status(error.message, true); }
+    }
+    async function retry() {
+      try {
+        if (!standalone) { const result = await call('/api/orders', payload(2)); if (!result.response.ok || !result.data.replayed) throw new Error(result.data.error || 'The server did not report a replay'); if (result.data.order.ID.slice(0, 10) !== demo.orderID) throw new Error('Retry returned a different order ID'); }
+        demo.phase = 2; render(); status(standalone ? '200 OK · original order returned · replayed = true' : `200 OK · same order ${demo.orderID} · replayed = true`);
+      } catch (error) { status(error.message, true); }
+    }
+    async function changed() {
+      try {
+        if (!standalone) { const result = await call('/api/orders', payload(3)); if (result.response.status !== 409) throw new Error('Expected a 409 conflict for changed order details'); }
+        demo.phase = 3; render(); status('409 Conflict · same key cannot be used for BUY 3 after BUY 2. No duplicate order exists.');
+      } catch (error) { status(error.message, true); }
+    }
+    $('#original').addEventListener('click', original);
+    $('#retry').addEventListener('click', retry);
+    $('#changed').addEventListener('click', changed);
+    render();
+  </script>
+</body>
+</html>

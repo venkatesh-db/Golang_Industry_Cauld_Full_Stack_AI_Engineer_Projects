@@ -1,0 +1,25 @@
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+  external_labels:
+    environment: local-lab
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: feed-api
+    static_configs:
+      - targets: ["feed-api:8080"]
+
+  - job_name: recommendation-service
+    static_configs:
+      - targets: ["recommendation-service:8081"]
+
+  - job_name: profile-service
+    static_configs:
+      - targets: ["profile-service:8082"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

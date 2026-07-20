@@ -1,0 +1,105 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
+      "id": 1,
+      "targets": [{"expr": "sum by (job) (rate(http_requests_total{job=~\"$service\"}[1m]))", "legendFormat": "{{job}}", "refId": "A"}],
+      "title": "Request rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
+      "id": 2,
+      "targets": [{"expr": "sum by (job) (rate(http_requests_total{job=~\"$service\",status=~\"5..\"}[5m])) / clamp_min(sum by (job) (rate(http_requests_total{job=~\"$service\"}[5m])), 0.001)", "legendFormat": "{{job}}", "refId": "A"}],
+      "title": "5xx error ratio",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
+      "id": 3,
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le,job,route) (rate(http_request_duration_seconds_bucket{job=~\"$service\"}[5m])))", "legendFormat": "p95 {{job}} {{route}}", "refId": "A"}, {"expr": "histogram_quantile(0.99, sum by (le,job,route) (rate(http_request_duration_seconds_bucket{job=~\"$service\"}[5m])))", "legendFormat": "p99 {{job}} {{route}}", "refId": "B"}],
+      "title": "p95 / p99 latency (click exemplars for traces)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 8},
+      "id": 4,
+      "targets": [{"expr": "sum by (job,route) (in_flight_requests{job=~\"$service\"})", "legendFormat": "{{job}} {{route}}", "refId": "A"}],
+      "title": "In-flight requests",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 8},
+      "id": 5,
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le,job,dependency,operation) (rate(dependency_duration_seconds_bucket{job=~\"$service\"}[5m])))", "legendFormat": "{{job}} {{dependency}}/{{operation}}", "refId": "A"}],
+      "title": "Dependency p95",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "short", "min": 0}, "overrides": []},
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 8},
+      "id": 6,
+      "targets": [{"expr": "go_goroutines{job=~\"$service\"}", "legendFormat": "{{job}}", "refId": "A"}],
+      "title": "Goroutines",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "id": 7,
+      "targets": [{"expr": "go_memstats_heap_alloc_bytes{job=~\"$service\"}", "legendFormat": "heap {{job}}", "refId": "A"}, {"expr": "go_memstats_heap_inuse_bytes{job=~\"$service\"}", "legendFormat": "in-use {{job}}", "refId": "B"}],
+      "title": "Go heap",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "id": 8,
+      "targets": [{"expr": "sum by (job,dependency,status) (rate(dependency_duration_seconds_count{job=~\"$service\"}[5m]))", "legendFormat": "{{job}} {{dependency}} {{status}}", "refId": "A"}],
+      "title": "Dependency outcomes",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 41,
+  "tags": ["go", "observability", "slo"],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {"text": "All", "value": "$__all"},
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "definition": "label_values(http_requests_total, job)",
+        "includeAll": true,
+        "label": "Service",
+        "name": "service",
+        "query": {"query": "label_values(http_requests_total, job)", "refId": "PrometheusVariableQueryEditor-VariableQuery"},
+        "refresh": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {"from": "now-30m", "to": "now"},
+  "timezone": "browser",
+  "title": "Go Production Observability Lab",
+  "uid": "go-production-observability",
+  "version": 1
+}
