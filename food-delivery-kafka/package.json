@@ -1,0 +1,34 @@
+{
+  "name": "food-delivery-kafka",
+  "version": "1.0.0",
+  "description": "Production-grade event-driven food delivery on Apache Kafka (outbox, idempotency, saga)",
+  "type": "module",
+  "scripts": {
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:logs": "docker compose logs -f kafka",
+    "setup": "tsx scripts/setup.ts",
+    "order": "tsx services/order-svc/main.ts",
+    "payment": "tsx services/payment-svc/main.ts",
+    "restaurant": "tsx services/restaurant-svc/main.ts",
+    "delivery": "tsx services/delivery-svc/main.ts",
+    "notification": "tsx services/notification-svc/main.ts",
+    "gateway": "tsx services/sse-gateway/main.ts",
+    "all": "concurrently -n order,payment,restaurant,delivery,notify,gateway -c cyan,green,yellow,magenta,blue,white \"npm:order\" \"npm:payment\" \"npm:restaurant\" \"npm:delivery\" \"npm:notification\" \"npm:gateway\"",
+    "sim:burst": "tsx sim/burst.ts",
+    "sim:chaos": "tsx sim/chaos.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ioredis": "^5.4.1",
+    "kafkajs": "^2.2.4",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.10",
+    "concurrently": "^9.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
