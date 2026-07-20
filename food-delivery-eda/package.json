@@ -1,0 +1,16 @@
+{
+  "name": "food-delivery-eda",
+  "version": "1.0.0",
+  "description": "Event-driven food delivery (Swiggy/Zomato-style) backend — order lifecycle as an event-sourced state machine",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "sim": "tsx src/sim/simulate.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
