@@ -1,0 +1,114 @@
+{
+  "uid": "instascale-red",
+  "title": "InstaScale — RED + Resources",
+  "tags": ["instascale"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(http_requests_total, service)",
+        "includeAll": true,
+        "multi": true,
+        "current": { "text": "All", "value": "$__all" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Request rate (RPS) by service",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (service) (rate(http_requests_total{service=~\"$service\"}[1m]))",
+          "legendFormat": "{{service}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Error ratio (5xx) by service",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
+      "targets": [
+        {
+          "expr": "sum by (service) (rate(http_requests_total{service=~\"$service\",code=~\"5..\"}[1m])) / clamp_min(sum by (service) (rate(http_requests_total{service=~\"$service\"}[1m])), 1e-9)",
+          "legendFormat": "{{service}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Latency p95 (with exemplars -> Tempo)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (service, le) (rate(http_request_duration_seconds_bucket{service=~\"$service\"}[5m])))",
+          "legendFormat": "p95 {{service}}",
+          "exemplar": true
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Latency p99",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (service, le) (rate(http_request_duration_seconds_bucket{service=~\"$service\"}[5m])))",
+          "legendFormat": "p99 {{service}}",
+          "exemplar": true
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "DB pool: acquired vs max",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "db_pool_acquired_conns{service=~\"$service\"}", "legendFormat": "acquired {{service}}" },
+        { "expr": "db_pool_max_conns{service=~\"$service\"}", "legendFormat": "max {{service}}" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Goroutines (leak signature)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "go_goroutines{service=~\"$service\"}", "legendFormat": "{{service}}" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Heap alloc bytes (mem-pressure signature)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "targets": [
+        { "expr": "go_memstats_alloc_bytes{service=~\"$service\"}", "legendFormat": "{{service}}" }
+      ]
+    }
+  ]
+}

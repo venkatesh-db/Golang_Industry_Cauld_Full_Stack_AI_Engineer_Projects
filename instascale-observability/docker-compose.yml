@@ -1,0 +1,122 @@
+# InstaScale Observability & Failure Lab — one-command stack.
+# `docker compose up -d --build` boots services + Postgres + Redis + the full
+# Grafana LGTM observability plane. Single replicas + short retention keep it
+# under the ~4GB laptop guardrail.
+
+x-svc-env: &svc-env
+  env_file: .env
+
+services:
+  # ---------- data stores ----------
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-insta}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-insta}
+      POSTGRES_DB: ${POSTGRES_DB:-insta}
+    volumes:
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-insta}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    ports: ["5432:5432"]
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    ports: ["6379:6379"]
+
+  # ---------- Go services ----------
+  counter-service:
+    build: { context: ., args: { SERVICE: counter-service } }
+    <<: *svc-env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      otel-collector: { condition: service_started }
+    ports: ["8082:8082"]
+
+  feed-service:
+    build: { context: ., args: { SERVICE: feed-service } }
+    <<: *svc-env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      otel-collector: { condition: service_started }
+    ports: ["8081:8081"]
+
+  edge-api:
+    build: { context: ., args: { SERVICE: edge-api } }
+    <<: *svc-env
+    depends_on:
+      feed-service: { condition: service_started }
+      counter-service: { condition: service_started }
+    ports: ["8080:8080"]
+
+  # ---------- observability plane (LGTM) ----------
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-remote-write-receiver          # accept Tempo span metrics
+      - --enable-feature=exemplar-storage            # store trace_id exemplars
+      - --storage.tsdb.retention.time=6h
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus/rules.yml:/etc/prometheus/rules.yml:ro
+    ports: ["9090:9090"]
+
+  tempo:
+    image: grafana/tempo:2.7.0
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./deploy/tempo/tempo.yaml:/etc/tempo.yaml:ro
+    ports: ["3200:3200"]
+
+  loki:
+    image: grafana/loki:3.3.2
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./deploy/loki/loki.yaml:/etc/loki/loki.yaml:ro
+    ports: ["3100:3100"]
+
+  promtail:
+    image: grafana/promtail:3.3.2
+    command: ["-config.file=/etc/promtail/promtail.yaml"]
+    volumes:
+      - ./deploy/loki/promtail.yaml:/etc/promtail/promtail.yaml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on: [loki]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.117.0
+    command: ["--config=/etc/otel/collector.yaml"]
+    volumes:
+      - ./deploy/otel/collector.yaml:/etc/otel/collector.yaml:ro
+    depends_on: [tempo]
+    ports: ["4317:4317", "4318:4318"]
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.0
+    volumes:
+      - ./deploy/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports: ["9093:9093"]
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on: [prometheus, tempo, loki]
+    ports: ["3001:3000"]   # host 3000 may be taken by another Grafana; use 3001

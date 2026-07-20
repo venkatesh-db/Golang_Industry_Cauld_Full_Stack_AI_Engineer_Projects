@@ -1,0 +1,12 @@
+route:
+  receiver: log-sink
+  group_by: ["alertname", "service"]
+  group_wait: 5s
+  group_interval: 10s
+  repeat_interval: 1h
+
+receivers:
+  # Lab sink: firing alerts are visible in the Alertmanager UI (:9093). No real
+  # paging integration — this is a demo. Add a webhook_configs block here to wire
+  # Slack/PagerDuty for a live "get paged" demo.
+  - name: log-sink

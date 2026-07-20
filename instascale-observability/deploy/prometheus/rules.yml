@@ -1,0 +1,60 @@
+groups:
+  - name: instascale-slo
+    rules:
+      # --- recording rules: p95 / p99 latency per service (5m window) ---
+      - record: service:http_request_duration_seconds:p95
+        expr: |
+          histogram_quantile(0.95,
+            sum by (service, le) (rate(http_request_duration_seconds_bucket[5m])))
+      - record: service:http_request_duration_seconds:p99
+        expr: |
+          histogram_quantile(0.99,
+            sum by (service, le) (rate(http_request_duration_seconds_bucket[5m])))
+      - record: service:http_requests:error_ratio
+        expr: |
+          sum by (service) (rate(http_requests_total{code=~"5.."}[5m]))
+          /
+          clamp_min(sum by (service) (rate(http_requests_total[5m])), 1e-9)
+
+      # --- SLO alerts ---
+      - alert: HighP95Latency
+        expr: service:http_request_duration_seconds:p95 > 0.5
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: "p95 latency > 500ms on {{ $labels.service }}"
+          description: "p95 is {{ $value | humanizeDuration }} (SLO 500ms). Likely slow-dependency or saturation."
+
+      - alert: HighP99Latency
+        expr: service:http_request_duration_seconds:p99 > 1
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "p99 latency > 1s on {{ $labels.service }}"
+          description: "p99 is {{ $value | humanizeDuration }} (SLO 1s)."
+
+      - alert: HighErrorRatio
+        expr: service:http_requests:error_ratio > 0.05
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "5xx error ratio > 5% on {{ $labels.service }}"
+          description: "Error ratio {{ $value | humanizePercentage }} — retry-storm or downstream failure."
+
+      - alert: DBPoolSaturated
+        # max>0 guard excludes services with no pool (e.g. edge-api), whose gauges
+        # are 0 and would otherwise satisfy 0 >= 0.
+        expr: db_pool_max_conns > 0 and db_pool_acquired_conns >= db_pool_max_conns
+        for: 30s
+        labels: { severity: critical }
+        annotations:
+          summary: "DB pool saturated on {{ $labels.service }}"
+          description: "acquired == max; requests are queuing on connection acquire."
+
+      - alert: GoroutineLeakSuspected
+        expr: delta(go_goroutines[5m]) > 500
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: "Goroutine count climbing on {{ $labels.service }}"
+          description: "+{{ $value }} goroutines/5m — possible leak."
